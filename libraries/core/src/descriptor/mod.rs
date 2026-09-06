@@ -206,15 +206,22 @@ pub fn resolve_aliases_and_set_defaults_in_topology(
                 CoreNodeKind::Custom(custom)
             }
             classify::NodeClass::Runtime => {
-                let runtime = node.operators.as_ref().ok_or_eyre("no operators")?;
-                CoreNodeKind::Runtime(runtime.clone())
+                // `node` is already an owned copy (see `desc.nodes.clone()`
+                // above) and `ResolvedNode::from_node` never reads
+                // `operators`, so move the operator subtree out instead of
+                // deep-cloning it a second time.
+                let runtime = node.operators.take().ok_or_eyre("no operators")?;
+                CoreNodeKind::Runtime(runtime)
             }
             classify::NodeClass::Operator => {
-                let op = node.operator.as_ref().ok_or_eyre("no operator")?;
+                // Move the operator out of the owned `node` rather than
+                // cloning its (potentially large) config; `from_node` does
+                // not read `operator`.
+                let op = node.operator.take().ok_or_eyre("no operator")?;
                 CoreNodeKind::Runtime(RuntimeNode {
                     operators: vec![OperatorDefinition {
-                        id: op.id.clone().unwrap_or_else(|| default_op_id.clone()),
-                        config: op.config.clone(),
+                        id: op.id.unwrap_or_else(|| default_op_id.clone()),
+                        config: op.config,
                     }],
                 })
             }
